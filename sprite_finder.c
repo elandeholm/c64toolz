@@ -206,6 +206,62 @@ static void print_string_line_col(struct graphics_t *gc, const unsigned char *st
 }
 
 
+static void put_sprite(struct graphics_t *gc, unsigned char *sdata,
+											int x0, int y0, int scale, int bg, int fg)
+{
+	int row, column, x, y, xx, yy;
+	int pixels, pixel;
+	unsigned char bgr, bgg, bgb;
+	unsigned char fgr, fgg, fgb;
+	int texture_index;
+	unsigned char *tp, pr, pg, pb;
+			
+	bgr = gc->palette[bg].r; bgg = gc->palette[bg].g; bgb = gc->palette[bg].b;
+	fgr = gc->palette[fg].r; fgg = gc->palette[fg].g; fgb = gc->palette[fg].b;
+	
+	for(row = 0; row < 21; ++row)
+	{
+		pixels = (sdata[3*row+0] << 16) | (sdata[3*row+1] << 8) | (sdata[3*row+2]);
+		for(y = 0; y < scale; ++y)
+		{
+			yy = row * scale + y + y0;
+			
+			if (yy >= 0 && yy < gc->height)
+			{
+				texture_index = yy * gc->gl_line_bytes;		
+				pixel = pixels;
+				for(column = 0; column < 24; ++column)
+				{
+					switch(pixel & 0x800000)
+					{
+						case 0x000000:
+							pr = bgr; pg = bgg; pb = bgb;
+							break;
+						default:
+							pr = fgr; pg = fgg; pb = fgb;
+							break;
+					}
+
+					tp = &gc->gl_texture[texture_index+(x0+column*scale)*4];
+
+					for(x = 0; x < scale; ++x)
+					{
+						xx = column * scale + x + x0;
+						if ((xx >= 0) && (xx < gc->width))
+						{
+							tp[4*x+0] = pb;
+							tp[4*x+1] = pg;
+							tp[4*x+2] = pr;
+							tp[4*x+3] = 255;
+						}
+					}			
+					pixel = (pixel & 0x7fffff) << 1;
+				}
+			}
+		}
+	}
+}
+
 static void put_mc_sprite(struct graphics_t *gc, unsigned char *sdata,
 													int x0, int y0, int scale, int bg, int fg0, int fg1, int fg2)
 {
@@ -272,6 +328,7 @@ static void put_mc_sprite(struct graphics_t *gc, unsigned char *sdata,
 	}
 }
 
+int multi_color = 1;
 int sprite_number = 0;
 int snapshot_offset = 132;
 int _bg = 0x00;
@@ -319,8 +376,16 @@ static void xyzzy(struct graphics_t *gc)
 			{
 				addr = C64SNAPSHOT_SIZE - 64;
 			}
-			put_mc_sprite(gc, &gc->c64snapshot[addr],
-			32 + 52 * x, 80 + y * 48, 2, bg, fg0, fg1, fg2);
+			if (multi_color)
+			{
+				put_mc_sprite(gc, &gc->c64snapshot[addr],
+				32 + 52 * x, 80 + y * 48, 2, bg, fg0, fg1, fg2);
+			}
+			else
+			{
+				put_sprite(gc, &gc->c64snapshot[addr],
+				32 + 52 * x, 80 + y * 48, 2, bg, fg0);
+			}
 		}
 	}
 }
@@ -405,7 +470,11 @@ static void glut_keyboard(unsigned char key, int x, int y)
 		case 164:
 			_fg2 = (_fg2 - 1) & 0xf;
 			break;
-	
+
+		case 'm':
+			multi_color = 1 ^ multi_color;
+			break;
+
 		case ' ':
 			sprite_number += 1;
 			break;
